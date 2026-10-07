@@ -600,7 +600,9 @@ async def create_vulnerability_report(
         endpoint: API path / Git path (e.g. ``/api/login``).
         method: HTTP method when relevant.
         cve: ``CVE-YYYY-NNNNN`` if certain, else omit.
-        cwe: ``CWE-NNN`` (most specific child) if certain, else omit.
+        cwe: ``CWE-NNN`` (most specific child) if certain, else omit. It drives
+            the compliance mapping (OWASP/ASVS/PCI/SOC 2/ISO/NIST), so provide it
+            whenever the class is clear.
         code_locations: White-box findings — list of location objects.
 
             **How ``fix_before`` / ``fix_after`` work**: they're used as

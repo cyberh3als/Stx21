@@ -16,6 +16,7 @@ from pygments.lexers import PythonLexer, get_lexer_by_name, guess_lexer
 from pygments.lexers.special import TextLexer
 from pygments.util import ClassNotFound
 
+from strix.compliance import FRAMEWORKS, render_markdown, summarize
 from strix.core.paths import run_record_path
 
 
@@ -246,6 +247,14 @@ def render_vulnerability_md(report: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         lines.extend(f"- [ ] {item}" for item in verification.get("reasons") or [])
         lines.append("")
 
+    controls = report.get("controls")
+    if isinstance(controls, dict) and controls:
+        lines.append("## Compliance Mapping\n")
+        for framework, entries in controls.items():
+            ids = ", ".join(str(e.get("id")) for e in entries if isinstance(e, dict))
+            lines.append(f"- **{FRAMEWORKS.get(framework, framework)}:** {ids}")
+        lines.append("")
+
     if report.get("impact"):
         lines.append("## Impact\n")
         lines.append(str(report["impact"]))
@@ -315,3 +324,12 @@ def render_vulnerability_md(report: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         lines.append("")
 
     return "\n".join(lines)
+
+
+def write_compliance_mapping(run_dir: Path, reports: list[dict[str, Any]]) -> None:
+    """Write ``compliance_mapping.json`` and ``compliance_mapping.md`` to ``run_dir``."""
+    summary = summarize(reports)
+    (run_dir / "compliance_mapping.json").write_text(
+        json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    (run_dir / "compliance_mapping.md").write_text(render_markdown(summary), encoding="utf-8")
