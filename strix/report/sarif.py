@@ -535,6 +535,12 @@ def _result_properties(
     if isinstance(dependency_metadata, dict) and dependency_metadata:
         strix["dependency_metadata"] = dependency_metadata
 
+    verification = report.get("verification")
+    if isinstance(verification, dict) and verification.get("status"):
+        strix["verification"] = {
+            key: verification[key] for key in ("status", "validator") if verification.get(key)
+        }
+
     # SARIF is written for external upload (code-scanning / ASPM), so it must
     # NOT carry the weaponized exploit payload — that stays a local run
     # artifact (vulnerabilities.json / the finding MD). We surface the PoC

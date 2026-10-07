@@ -236,6 +236,16 @@ def render_vulnerability_md(report: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         lines.append(str(report["evidence"]))
         lines.append("")
 
+    verification = report.get("verification")
+    if isinstance(verification, dict) and verification.get("status"):
+        lines.append("## Verification\n")
+        validator = verification.get("validator")
+        suffix = f" (validator: {validator})" if validator else ""
+        lines.append(f"**Status:** {str(verification['status']).replace('_', ' ')}{suffix}")
+        lines.extend(f"- [x] {item}" for item in verification.get("checks") or [])
+        lines.extend(f"- [ ] {item}" for item in verification.get("reasons") or [])
+        lines.append("")
+
     if report.get("impact"):
         lines.append("## Impact\n")
         lines.append(str(report["impact"]))
