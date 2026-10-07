@@ -535,6 +535,13 @@ def _result_properties(
     if isinstance(dependency_metadata, dict) and dependency_metadata:
         strix["dependency_metadata"] = dependency_metadata
 
+    controls = report.get("controls")
+    if isinstance(controls, dict) and controls:
+        strix["controls"] = {
+            framework: [e["id"] for e in entries if isinstance(e, dict) and "id" in e]
+            for framework, entries in controls.items()
+        }
+
     verification = report.get("verification")
     if isinstance(verification, dict) and verification.get("status"):
         strix["verification"] = {

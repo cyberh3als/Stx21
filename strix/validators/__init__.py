@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from strix.validators import web  # noqa: F401  (registers validators)
+from strix.validators import mobile, network, web  # noqa: F401  (registers validators)
 from strix.validators.base import available_types, canonical_type, get_validator
+from strix.validators.browser import check_xss_execution
+from strix.validators.replay import REPLAYABLE_TYPES, replay
 
 
 _CWE_TO_TYPE = {
@@ -81,3 +83,100 @@ def evaluate(validation: dict[str, Any] | None, cwe: str | None) -> dict[str, An
         return {"status": NOT_VALIDATED, "validator": None, "checks": [], "reasons": []}
     spec = {k: v for k, v in validation.items() if k != "type"}
     return validator(spec).to_dict()
+
+
+def _replayable(validator: str | None, spec: dict[str, Any]) -> bool:
+    if validator not in REPLAYABLE_TYPES:
+        return False
+    multi_request = ("injected_ms", "baseline_ms", "true_response", "false_response")
+    if validator == "sql_injection" and any(k in spec for k in multi_request):
+        return False
+    return not (validator == "ssrf" and ("token" in spec or "callback_log" in spec))
+
+
+def apply_replay(
+    validation: dict[str, Any] | None,
+    verification: dict[str, Any],
+    *,
+    scope: dict[Any, str],
+    allow_unsafe_methods: bool = False,
+    timeout: float = 20.0,
+    gateway_host: str | None = None,
+) -> dict[str, Any]:
+    """Re-send the evidence request and re-validate the fresh response.
+
+    Only a request that was actually answered and did not reproduce downgrades
+    the finding; skipped or errored replays leave the status untouched.
+    """
+    if verification.get("status") != "verified" or not isinstance(validation, dict):
+        return verification
+    spec = {k: v for k, v in validation.items() if k != "type"}
+    validator_name = verification.get("validator")
+    if not _replayable(validator_name, spec):
+        verification["replay"] = {
+            "status": "skipped",
+            "detail": "evidence is not a single request/response pair",
+        }
+        return verification
+
+    result = replay(
+        spec.get("request"),
+        scope,
+        allow_unsafe_methods=allow_unsafe_methods,
+        timeout=timeout,
+        gateway_host=gateway_host,
+    )
+    if result.status in ("skipped", "error"):
+        verification["replay"] = {"status": result.status, "detail": result.detail}
+        return verification
+
+    validator = get_validator(str(validator_name))
+    outcome = validator({**spec, "response": result.response}) if validator else None
+    if outcome is not None and outcome.ok:
+        verification["replay"] = {"status": "reproduced", "http_status": result.http_status}
+        return verification
+    verification["status"] = "unverified"
+    verification["replay"] = {"status": "not_reproduced", "http_status": result.http_status}
+    verification["reasons"] = [
+        *verification.get("reasons", []),
+        "replay did not reproduce the evidence: "
+        + "; ".join(outcome.reasons if outcome else ["validator unavailable"]),
+    ]
+    return verification
+
+
+def apply_browser_check(
+    validation: dict[str, Any] | None,
+    verification: dict[str, Any],
+    *,
+    mode: str = "auto",
+) -> dict[str, Any]:
+    """Require proof that an XSS payload executes in a real browser.
+
+    ``auto`` runs the check when the finding supplies an ``execution_token`` and
+    only a payload that was rendered and did not run downgrades the finding.
+    ``required`` also fails XSS findings with no token or no usable browser.
+    """
+    if (
+        mode == "off"
+        or verification.get("status") != "verified"
+        or verification.get("validator") != "xss"
+        or not isinstance(validation, dict)
+    ):
+        return verification
+
+    result = check_xss_execution({k: v for k, v in validation.items() if k != "type"})
+    verification["browser"] = {"status": result.status, "detail": result.detail}
+    if result.status == "executed":
+        verification["checks"] = [*verification.get("checks", []), result.detail]
+        return verification
+    failed = result.status == "not_executed" or (
+        mode == "required" and result.status in ("skipped", "unavailable")
+    )
+    if failed:
+        verification["status"] = "unverified"
+        verification["reasons"] = [
+            *verification.get("reasons", []),
+            f"browser execution check: {result.detail}",
+        ]
+    return verification

@@ -79,6 +79,18 @@ def _render_api_spec(details: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _render_mobile_app(details: dict[str, Any]) -> list[str]:
+    path = details.get("workspace_path") or details.get("target_app", "")
+    return [
+        f"- {path} ({details.get('platform', 'mobile')} app)",
+        "  - Call `analyze_mobile_app` for deterministic static analysis (manifest/plist, "
+        "network security config, embedded secrets) and load the "
+        "`mobile_app_assessment` skill for the methodology.",
+        "  - Hosts or URLs found inside the app are NOT in scope unless they are also listed "
+        "as targets.",
+    ]
+
+
 def _render_workspace_files(scan_config: dict[str, Any]) -> list[str]:
     """List the files the user handed to the run.
 
@@ -104,7 +116,7 @@ def _render_workspace_files(scan_config: dict[str, Any]) -> list[str]:
     ]
 
 
-def build_root_task(scan_config: dict[str, Any]) -> str:
+def build_root_task(scan_config: dict[str, Any]) -> str:  # noqa: PLR0912
     targets = scan_config.get("targets", []) or []
     diff_scope = scan_config.get("diff_scope") or {}
     user_instructions = scan_config.get("user_instructions", "") or ""
@@ -114,7 +126,9 @@ def build_root_task(scan_config: dict[str, Any]) -> str:
         "Local Codebases": [],
         "URLs": [],
         "IP Addresses": [],
+        "IP Ranges": [],
         "API Specifications": [],
+        "Mobile Apps": [],
     }
 
     for target in targets:
@@ -140,6 +154,13 @@ def build_root_task(scan_config: dict[str, Any]) -> str:
             sections["URLs"].append(f"- {details.get('target_url', '')}")
         elif ttype == "ip_address":
             sections["IP Addresses"].append(f"- {details.get('target_ip', '')}")
+        elif ttype == "mobile_app":
+            sections["Mobile Apps"].extend(_render_mobile_app(details))
+        elif ttype == "ip_range":
+            sections["IP Ranges"].append(
+                f"- {details.get('target_cidr', '')} (every address in this range is in scope; "
+                "nothing outside it is)"
+            )
         elif ttype == "api_spec":
             sections["API Specifications"].extend(_render_api_spec(details))
 
@@ -196,7 +217,9 @@ def build_scope_context(scan_config: dict[str, Any]) -> dict[str, Any]:
         "local_code": "target_path",
         "web_application": "target_url",
         "ip_address": "target_ip",
+        "ip_range": "target_cidr",
         "api_spec": "target_spec",
+        "mobile_app": "target_app",
     }
     for target in scan_config.get("targets", []) or []:
         ttype = target.get("type", "unknown")

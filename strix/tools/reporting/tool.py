@@ -169,13 +169,36 @@ def _validation_mode() -> str:
     return load_settings().validation.mode
 
 
-def _run_validators(validation: dict[str, Any] | None, cwe: str | None) -> dict[str, Any] | None:
-    """Run the deterministic validator for this finding; ``None`` when disabled."""
+async def _run_validators(
+    validation: dict[str, Any] | None, cwe: str | None
+) -> dict[str, Any] | None:
+    """Run the deterministic validator (and optional replay); ``None`` when disabled."""
+    from strix.config import load_settings
+
+    settings = load_settings().validation
     if _validation_mode() == "off":
         return None
-    from strix.validators import evaluate
+    from strix.validators import apply_browser_check, apply_replay, evaluate
 
-    return evaluate(validation, cwe)
+    verification = apply_browser_check(validation, evaluate(validation, cwe), mode=settings.browser)
+    if not settings.replay:
+        return verification
+
+    from strix.interface.scan_setup import HOST_GATEWAY_HOSTNAME
+    from strix.report.state import get_global_report_state
+    from strix.validators.replay import scope_from_targets
+
+    state = get_global_report_state()
+    targets = (state.run_record.get("targets_info") if state else None) or []
+    return await asyncio.to_thread(
+        apply_replay,
+        validation,
+        verification,
+        scope=scope_from_targets(targets, HOST_GATEWAY_HOSTNAME),
+        allow_unsafe_methods=settings.replay_unsafe_methods,
+        timeout=settings.replay_timeout,
+        gateway_host=HOST_GATEWAY_HOSTNAME,
+    )
 
 
 async def _do_create(  # noqa: PLR0911, PLR0912
@@ -256,7 +279,7 @@ async def _do_create(  # noqa: PLR0911, PLR0912
     except ValueError as exc:
         return {"success": False, "error": "Validation failed", "errors": [str(exc)]}
 
-    verification = _run_validators(validation, cwe)
+    verification = await _run_validators(validation, cwe)
     if verification and verification["status"] == "unverified" and _validation_mode() == "enforce":
         return {
             "success": False,
@@ -600,7 +623,9 @@ async def create_vulnerability_report(
         endpoint: API path / Git path (e.g. ``/api/login``).
         method: HTTP method when relevant.
         cve: ``CVE-YYYY-NNNNN`` if certain, else omit.
-        cwe: ``CWE-NNN`` (most specific child) if certain, else omit.
+        cwe: ``CWE-NNN`` (most specific child) if certain, else omit. It drives
+            the compliance mapping (OWASP/ASVS/PCI/SOC 2/ISO/NIST), so provide it
+            whenever the class is clear.
         code_locations: White-box findings — list of location objects.
 
             **How ``fix_before`` / ``fix_after`` work**: they're used as
@@ -676,7 +701,11 @@ async def create_vulnerability_report(
             (request + response) exactly as captured, never summaries.
 
             - ``xss``: ``payload``, ``request``, ``response`` — payload must
-              appear unencoded in an HTML response (CSP is checked).
+              appear unencoded in an HTML response (CSP is checked). Add
+              ``execution_token`` to prove it runs in a real browser: use an
+              auto-firing payload that surfaces a unique token, e.g.
+              ``<img src=x onerror=alert('STRIX-a1b2c3')>`` with
+              ``execution_token: "STRIX-a1b2c3"`` (no click/hover payloads).
             - ``sql_injection``: error-based ``request``/``response`` (+
               ``baseline_response``); or time-based ``delay_s``,
               ``baseline_ms``, ``injected_ms`` (>=2 samples each); or

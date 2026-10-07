@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from agents.usage import Usage
 
+from strix.compliance import map_cwe
 from strix.config import codex
 from strix.config.loader import load_settings
 from strix.core.paths import run_dir_for
@@ -19,6 +20,7 @@ from strix.report.sarif import write_sarif
 from strix.report.usage import LLMUsageLedger
 from strix.report.writer import (
     read_run_record,
+    write_compliance_mapping,
     write_executive_report,
     write_run_record,
     write_vulnerabilities,
@@ -300,6 +302,9 @@ class ReportState:
         report["finding_class"] = (finding_class or "dynamic").strip().lower()
         if verification:
             report["verification"] = verification
+        controls = map_cwe(cwe)
+        if controls:
+            report["controls"] = controls
         if dependency_metadata:
             report["dependency_metadata"] = dependency_metadata
         if agent_id:
@@ -477,6 +482,12 @@ class ReportState:
                 )
             except Exception:
                 logger.exception("SARIF emit failed (non-fatal; CSV/MD unaffected)")
+
+            if self.vulnerability_reports:
+                try:
+                    write_compliance_mapping(run_dir, self.vulnerability_reports)
+                except Exception:
+                    logger.exception("Compliance mapping emit failed (non-fatal)")
 
             write_run_record(run_dir, self.run_record)
 
