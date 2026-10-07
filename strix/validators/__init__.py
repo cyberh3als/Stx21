@@ -12,6 +12,7 @@ from typing import Any
 
 from strix.validators import web  # noqa: F401  (registers validators)
 from strix.validators.base import available_types, canonical_type, get_validator
+from strix.validators.browser import check_xss_execution
 from strix.validators.replay import REPLAYABLE_TYPES, replay
 
 
@@ -141,4 +142,41 @@ def apply_replay(
         "replay did not reproduce the evidence: "
         + "; ".join(outcome.reasons if outcome else ["validator unavailable"]),
     ]
+    return verification
+
+
+def apply_browser_check(
+    validation: dict[str, Any] | None,
+    verification: dict[str, Any],
+    *,
+    mode: str = "auto",
+) -> dict[str, Any]:
+    """Require proof that an XSS payload executes in a real browser.
+
+    ``auto`` runs the check when the finding supplies an ``execution_token`` and
+    only a payload that was rendered and did not run downgrades the finding.
+    ``required`` also fails XSS findings with no token or no usable browser.
+    """
+    if (
+        mode == "off"
+        or verification.get("status") != "verified"
+        or verification.get("validator") != "xss"
+        or not isinstance(validation, dict)
+    ):
+        return verification
+
+    result = check_xss_execution({k: v for k, v in validation.items() if k != "type"})
+    verification["browser"] = {"status": result.status, "detail": result.detail}
+    if result.status == "executed":
+        verification["checks"] = [*verification.get("checks", []), result.detail]
+        return verification
+    failed = result.status == "not_executed" or (
+        mode == "required" and result.status in ("skipped", "unavailable")
+    )
+    if failed:
+        verification["status"] = "unverified"
+        verification["reasons"] = [
+            *verification.get("reasons", []),
+            f"browser execution check: {result.detail}",
+        ]
     return verification

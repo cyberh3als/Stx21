@@ -178,9 +178,9 @@ async def _run_validators(
     settings = load_settings().validation
     if _validation_mode() == "off":
         return None
-    from strix.validators import apply_replay, evaluate
+    from strix.validators import apply_browser_check, apply_replay, evaluate
 
-    verification = evaluate(validation, cwe)
+    verification = apply_browser_check(validation, evaluate(validation, cwe), mode=settings.browser)
     if not settings.replay:
         return verification
 
@@ -701,7 +701,11 @@ async def create_vulnerability_report(
             (request + response) exactly as captured, never summaries.
 
             - ``xss``: ``payload``, ``request``, ``response`` — payload must
-              appear unencoded in an HTML response (CSP is checked).
+              appear unencoded in an HTML response (CSP is checked). Add
+              ``execution_token`` to prove it runs in a real browser: use an
+              auto-firing payload that surfaces a unique token, e.g.
+              ``<img src=x onerror=alert('STRIX-a1b2c3')>`` with
+              ``execution_token: "STRIX-a1b2c3"`` (no click/hover payloads).
             - ``sql_injection``: error-based ``request``/``response`` (+
               ``baseline_response``); or time-based ``delay_s``,
               ``baseline_ms``, ``injected_ms`` (>=2 samples each); or

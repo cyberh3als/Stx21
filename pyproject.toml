@@ -54,6 +54,8 @@ dependencies = [
 [project.optional-dependencies]
 vertex = ["google-auth>=2.0.0"]
 bedrock = ["boto3>=1.28.0"]
+# Headless-browser proof of XSS execution (see strix/validators/browser.py).
+browser = ["playwright>=1.45"]
 
 [project.scripts]
 strix = "strix.interface.main:main"
@@ -68,6 +70,7 @@ dev = [
   "pyinstaller>=6.17.0; python_version >= '3.12' and python_version < '3.15'",
   "pytest>=8.3",
   "pytest-asyncio>=0.24",
+  "playwright>=1.45",
   "types-requests>=2.32",
 ]
 
