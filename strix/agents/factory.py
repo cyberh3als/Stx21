@@ -27,6 +27,7 @@ from strix.tools.agents_graph.tools import (
 )
 from strix.tools.finish.tool import finish_scan
 from strix.tools.load_skill.tool import load_skill
+from strix.tools.mobile.tool import analyze_mobile_app
 from strix.tools.network.tool import analyze_network_scan
 from strix.tools.notes.tools import (
     create_note,
@@ -505,6 +506,7 @@ _BASE_TOOLS: tuple[Tool, ...] = (
     list_reports,
     get_report,
     analyze_network_scan,
+    analyze_mobile_app,
     list_requests,
     view_request,
     repeat_request,

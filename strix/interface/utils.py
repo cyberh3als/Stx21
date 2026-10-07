@@ -507,6 +507,12 @@ def _derive_target_label_for_run_name(targets_info: list[dict[str, Any]] | None)
     if target_type == "ip_address":
         return str(details.get("target_ip", original) or original)
 
+    if target_type == "ip_range":
+        return str(details.get("target_cidr", original) or original)
+
+    if target_type == "mobile_app":
+        return str(Path(str(details.get("target_app", original))).stem or original)
+
     if target_type == "api_spec":
         if details.get("source") == "postman_api":
             return "postman-collection"
@@ -1201,6 +1207,16 @@ def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR09
             if path.is_dir():
                 check_mountable_dir(path)
                 return "local_code", {"target_path": str(path.resolve())}
+            suffix = path.suffix.lower()
+            if suffix in MOBILE_APP_PLATFORMS:
+                return "mobile_app", {
+                    "target_app": str(path.resolve()),
+                    "platform": MOBILE_APP_PLATFORMS[suffix],
+                }
+            if suffix == ".aab":
+                raise ValueError(
+                    "Android App Bundles (.aab) are not supported; provide an installable .apk"
+                )
             spec_format = detect_spec_format(path)
             if spec_format is not None:
                 return "api_spec", {
@@ -1237,7 +1253,8 @@ def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR09
         "- A Postman collection by id (postman://<collection-uid>[?env=<environment-uid>], "
         "needs POSTMAN_API_KEY)\n"
         "- A domain name (e.g., example.com)\n"
-        "- An IP address (e.g., 192.168.1.10) or a small range (CIDR, at most 256 addresses)"
+        "- An IP address (e.g., 192.168.1.10) or a small range (CIDR, at most 256 addresses)\n"
+        "- A mobile app package (.apk or .ipa)"
     )
 
 
@@ -1513,6 +1530,8 @@ def rewrite_localhost_targets(targets_info: list[dict[str, Any]], host_gateway: 
 #: API spec targets are copied into one workspace directory rather than mounted
 #: from wherever they happen to live on the host.
 API_SPEC_WORKSPACE_SUBDIR = "api-specs"
+MOBILE_APP_WORKSPACE_SUBDIR = "mobile-apps"
+MOBILE_APP_PLATFORMS = {".apk": "android", ".ipa": "ios"}
 
 
 def write_fetched_collection(collection: dict[str, Any], collection_uid: str) -> str:
@@ -1561,6 +1580,43 @@ def stage_api_specs(targets_info: list[dict[str, Any]], run_name: str) -> list[d
         {
             "source_path": str(staging),
             "workspace_subdir": API_SPEC_WORKSPACE_SUBDIR,
+            "protect_metadata": False,
+        }
+    ]
+
+
+def stage_mobile_apps(targets_info: list[dict[str, Any]], run_name: str) -> list[dict[str, Any]]:
+    """Copy every ``mobile_app`` target into one read-only directory for the sandbox.
+
+    The host-side analysis tool reads the original file; the copy lets the agent
+    inspect the package from the sandbox (``/workspace/mobile-apps``) without
+    mounting the user's directory.
+    """
+    apps = [t for t in targets_info if t.get("type") == "mobile_app"]
+    if not apps:
+        return []
+
+    staging = Path(tempfile.gettempdir()) / "strix_mobile_apps" / run_name
+    staging.mkdir(parents=True, exist_ok=True)
+
+    used: set[str] = set()
+    for target in apps:
+        details = target["details"]
+        source = Path(str(details["target_app"]))
+        name = source.name
+        stem, suffix = source.stem, source.suffix
+        count = 1
+        while name in used:
+            count += 1
+            name = f"{stem}-{count}{suffix}"
+        used.add(name)
+        shutil.copy2(source, staging / name)
+        details["workspace_path"] = f"/workspace/{MOBILE_APP_WORKSPACE_SUBDIR}/{name}"
+
+    return [
+        {
+            "source_path": str(staging),
+            "workspace_subdir": MOBILE_APP_WORKSPACE_SUBDIR,
             "protect_metadata": False,
         }
     ]
