@@ -163,7 +163,22 @@ _REQUIRED_FIELDS = {
 _VALID_FIX_EFFORT = frozenset({"trivial", "low", "medium", "high"})
 
 
-async def _do_create(  # noqa: PLR0912
+def _validation_mode() -> str:
+    from strix.config import load_settings
+
+    return load_settings().validation.mode
+
+
+def _run_validators(validation: dict[str, Any] | None, cwe: str | None) -> dict[str, Any] | None:
+    """Run the deterministic validator for this finding; ``None`` when disabled."""
+    if _validation_mode() == "off":
+        return None
+    from strix.validators import evaluate
+
+    return evaluate(validation, cwe)
+
+
+async def _do_create(  # noqa: PLR0911, PLR0912
     *,
     title: str,
     description: str,
@@ -183,6 +198,7 @@ async def _do_create(  # noqa: PLR0912
     cwe: str | None,
     code_locations: list[dict[str, Any]] | None,
     fix_pr_body: str | None = None,
+    validation: dict[str, Any] | None = None,
     agent_id: str | None = None,
     agent_name: str | None = None,
 ) -> dict[str, Any]:
@@ -239,6 +255,19 @@ async def _do_create(  # noqa: PLR0912
         cvss_score, severity, _vector = _calculate_cvss(cvss_breakdown)
     except ValueError as exc:
         return {"success": False, "error": "Validation failed", "errors": [str(exc)]}
+
+    verification = _run_validators(validation, cwe)
+    if verification and verification["status"] == "unverified" and _validation_mode() == "enforce":
+        return {
+            "success": False,
+            "error": "Finding not verified by the deterministic validator — it was NOT filed",
+            "verification": verification,
+            "hint": (
+                "Re-run the exploit, capture the raw request/response, and resubmit with a "
+                "`validation` object that satisfies the validator (see the tool docs). "
+                "If the issue cannot be demonstrated, it is not a confirmed vulnerability."
+            ),
+        }
 
     try:
         from strix.report.state import get_global_report_state
@@ -306,6 +335,7 @@ async def _do_create(  # noqa: PLR0912
             cwe=cwe,
             code_locations=parsed_locations,
             fix_pr_body=fix_pr_body,
+            verification=verification,
             agent_id=agent_id if isinstance(agent_id, str) else None,
             agent_name=agent_name if isinstance(agent_name, str) else None,
         )
@@ -326,6 +356,7 @@ async def _do_create(  # noqa: PLR0912
             "report_id": report_id,
             "severity": severity,
             "cvss_score": cvss_score,
+            **({"verification": verification} if verification else {}),
         }
 
 
@@ -365,6 +396,7 @@ async def create_vulnerability_report(
     cwe: str | None = None,
     code_locations: list[dict[str, Any]] | None = None,
     fix_pr_body: str | None = None,
+    validation: dict[str, Any] | None = None,
 ) -> str:
     """File a vulnerability report — one report per fully-verified finding.
 
@@ -637,6 +669,37 @@ async def create_vulnerability_report(
             fix (summary + rationale). Prose/markdown only — the code
             change itself belongs in ``code_locations``. Omit for
             black-box findings.
+        validation: Machine-checkable proof, verified by a deterministic
+            validator (not by you). Strongly recommended for black-box
+            findings; unverified findings are flagged and, in enforce
+            mode, rejected. ``type`` selects the validator; paste raw HTTP
+            (request + response) exactly as captured, never summaries.
+
+            - ``xss``: ``payload``, ``request``, ``response`` — payload must
+              appear unencoded in an HTML response (CSP is checked).
+            - ``sql_injection``: error-based ``request``/``response`` (+
+              ``baseline_response``); or time-based ``delay_s``,
+              ``baseline_ms``, ``injected_ms`` (>=2 samples each); or
+              boolean ``baseline_response``/``true_response``/
+              ``false_response``; or computed ``expected`` (UNION 7*191 ->
+              ``1337``).
+            - ``path_traversal``: ``request``, ``response`` showing real
+              file content (/etc/passwd, win.ini, private key).
+            - ``open_redirect``: ``request``, ``response`` (3xx + Location
+              to an attacker host that came from the request).
+            - ``ssti`` / ``rce``: ``request``, ``response``, ``expected`` —
+              a COMPUTED value (payload ``{{7*191}}`` -> ``1337``) that is
+              not in the request; ``rce`` also accepts ``id`` output.
+            - ``ssrf`` / ``oob``: ``request``, ``token`` (unique, >=8 chars,
+              sent in the request), ``callback_log`` (interaction record
+              from your listener/interactsh); ``ssrf`` also accepts
+              in-band cloud-metadata content in ``response``.
+            - ``idor``: ``request``, ``response``, ``attacker_identity``,
+              ``victim_identity``, ``victim_marker`` (data only the victim
+              owns that appears in the attacker's response).
+
+            Example: ``{"type": "ssti", "request": "GET /?name={{7*191}} ...",
+            "response": "HTTP/1.1 200 OK ... Hello 1337", "expected": "1337"}``
 
     Example (abbreviated — mirror this structure)::
 
@@ -695,6 +758,7 @@ async def create_vulnerability_report(
         cwe=cwe,
         code_locations=code_locations,
         fix_pr_body=fix_pr_body,
+        validation=validation,
         agent_id=agent_id,
         agent_name=agent_name,
     )

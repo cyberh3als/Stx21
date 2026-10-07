@@ -82,6 +82,18 @@ class DedupeSettings(BaseSettings):
     )
 
 
+class ValidationSettings(BaseSettings):
+    """How strictly deterministic validators gate vulnerability reports."""
+
+    model_config = _BASE_CONFIG
+
+    # off: skip validators. annotate: run them and record verification status.
+    # enforce: reject findings whose validator fails or whose evidence is missing.
+    mode: Literal["off", "annotate", "enforce"] = Field(
+        default="annotate", alias="STRIX_VALIDATION_MODE"
+    )
+
+
 class ContextSettings(BaseSettings):
     """Context-window management: per-tool-output caps and history compaction."""
 
@@ -149,6 +161,7 @@ class Settings(BaseSettings):
 
     llm: LlmSettings = Field(default_factory=LlmSettings)
     dedupe: DedupeSettings = Field(default_factory=DedupeSettings)
+    validation: ValidationSettings = Field(default_factory=ValidationSettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
     context: ContextSettings = Field(default_factory=ContextSettings)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
