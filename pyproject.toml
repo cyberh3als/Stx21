@@ -235,6 +235,9 @@ ignore = [
 "tests/test_codex_auth.py" = ["S105", "S106", "SLF001"]
 # Hatchling loads the build hook by path, not as an importable package.
 "scripts/tui_sidecar_hook.py" = ["INP001"]
+# Report CLI: prints its results to stdout, and lazily imports per subcommand
+# so picking `fixtures` doesn't drag in the `agent` mode's Docker/CLI deps.
+"benchmarks/run_benchmark.py" = ["T201", "PLC0415"]
 # Stdlib HTTP handler overrides (do_GET/do_POST).
 "strix/interface/auth_cli.py" = ["N802"]
 "tests/test_codex_streaming.py" = ["N802"]

@@ -34,6 +34,7 @@ TLSv1.2:
 _CERT = "Subject: commonName=old.example\nNot valid before: 2019-01-01T00:00:00\nNot valid after:  2020-01-01T00:00:00\n"
 
 NMAP_XML = f"""<?xml version="1.0"?>
+<!DOCTYPE nmaprun>
 <nmaprun scanner="nmap">
 <host><status state="up"/>
 <address addr="203.0.113.10" addrtype="ipv4"/>
@@ -148,6 +149,32 @@ def test_nmap_xml_with_dtd_or_garbage_is_rejected() -> None:
     assert parse_nmap_xml(evil) == []
     assert parse_nmap_xml("not xml") == []
     assert parse_nmap_xml("") == []
+
+
+def test_nmap_bare_doctype_is_allowed_but_subsets_and_external_refs_are_not() -> None:
+    # nmap's own -oX output always opens with exactly this: no internal
+    # subset, no SYSTEM/PUBLIC reference. Rejecting it discards every real
+    # scan, which is what benchmarks/harness/network_bench.py caught.
+    bare = '<?xml version="1.0"?>\n<!DOCTYPE nmaprun>\n<nmaprun><host></host></nmaprun>'
+    assert parse_nmap_xml(bare) == []  # well-formed but no <host>/<ports> content to extract
+    assert "ParseError" not in repr(parse_nmap_xml)  # sanity: doesn't raise
+
+    with_subset = '<?xml version="1.0"?>\n<!DOCTYPE nmaprun [<!ENTITY x "y">]>\n<nmaprun/>'
+    assert parse_nmap_xml(with_subset) == []
+
+    external_ref = (
+        '<?xml version="1.0"?>\n<!DOCTYPE nmaprun SYSTEM "http://evil.example/x.dtd">\n<nmaprun/>'
+    )
+    assert parse_nmap_xml(external_ref) == []
+
+    bare_with_open_port = (
+        '<?xml version="1.0"?>\n<!DOCTYPE nmaprun>\n<nmaprun><host>'
+        '<address addr="10.0.0.5" addrtype="ipv4"/>'
+        '<ports><port protocol="tcp" portid="6379"><state state="open"/></port></ports>'
+        "</host></nmaprun>"
+    )
+    parsed = parse_nmap_xml(bare_with_open_port)
+    assert [(s.host, s.port) for s in parsed] == [("10.0.0.5", 6379)]
 
 
 def test_parse_naabu_and_nuclei_skip_bad_lines() -> None:
