@@ -184,3 +184,21 @@ Server-Side Request Forgery enables the server to reach networks and services th
 ## Summary
 
 Any feature that fetches remote content on behalf of a user is a potential tunnel to internal networks and control planes. Bind scheme/host/port/headers explicitly or expect an attacker to route through them.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+**Out-of-band** (preferred; blind or not): put an unguessable token (at least 8 chars) in the URL you send, then paste the interaction record from your listener (interactsh). The token must not be echoed in the response.
+
+```json
+{
+  "type": "ssrf",
+  "request": "POST /fetch HTTP/1.1\nHost: app.example.test\nContent-Type: application/x-www-form-urlencoded\n\nurl=http://c7f3a91e2b.oast.example/",
+  "response": "HTTP/1.1 200 OK\nContent-Type: text/plain\n\nqueued",
+  "token": "c7f3a91e2b",
+  "callback_log": "[HTTP] GET / from 203.0.113.9 Host: c7f3a91e2b.oast.example"
+}
+```
+
+**In-band** is accepted when the response contains cloud-metadata or internal-service content that is not in the request (omit `token`/`callback_log`). Use `type: oob` for blind XXE/other out-of-band classes.

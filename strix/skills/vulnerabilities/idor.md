@@ -215,3 +215,20 @@ query IDOR {
 ## Summary
 
 Authorization must bind subject, action, and specific object on every request, regardless of identifier opacity or transport. If the binding is missing anywhere, the system is vulnerable.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+Use two real identities. `victim_marker` is data only the victim owns (at least 4 chars) that appears in the attacker's response and not in the attacker's request. Add `unauthenticated_response` if you tested anonymous access: a publicly readable resource is missing authentication, not IDOR.
+
+```json
+{
+  "type": "idor",
+  "attacker_identity": "user A (low privilege)",
+  "victim_identity": "user B",
+  "victim_marker": "victim.b@corp.example",
+  "request": "GET /api/orders/1002 HTTP/1.1\nHost: app.example.test\nAuthorization: Bearer <user A token>\n\n",
+  "response": "HTTP/1.1 200 OK\nContent-Type: application/json\n\n{\"id\":1002,\"email\":\"victim.b@corp.example\"}"
+}
+```

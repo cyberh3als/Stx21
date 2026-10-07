@@ -163,3 +163,17 @@ Open redirects enable phishing, OAuth/OIDC code and token theft, and allowlist b
 ## Summary
 
 Redirection is safe only when the final destination is constrained after canonicalization. Enforce exact origins, verify per hop, and treat client-provided destinations as untrusted across every stack.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+The response must be a 301/302/303/307/308 whose `Location` host is off-site and appears in the request (attacker-controlled). Meta-refresh/JS redirects are not covered.
+
+```json
+{
+  "type": "open_redirect",
+  "request": "GET /go?next=//evil.example HTTP/1.1\nHost: app.example.test\n\n",
+  "response": "HTTP/1.1 302 Found\nLocation: //evil.example/login\n\n"
+}
+```

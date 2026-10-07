@@ -188,3 +188,17 @@ Improper file path handling and dynamic inclusion enable sensitive file disclosu
 ## Summary
 
 Eliminate user-controlled paths where possible. Otherwise, resolve to canonical paths and enforce allowlists, forbid remote schemes, and lock down interpreters and extractors. Normalize consistently at the boundary closest to IO.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+The response must contain real file content (`/etc/passwd`, `win.ini`, `boot.ini`, a private key) that is not in the request or a baseline, and the request must contain the traversal.
+
+```json
+{
+  "type": "path_traversal",
+  "request": "GET /download?file=../../../../etc/passwd HTTP/1.1\nHost: app.example.test\n\n",
+  "response": "HTTP/1.1 200 OK\nContent-Type: text/plain\n\nroot:x:0:0:root:/root:/bin/bash\ndaemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin"
+}
+```

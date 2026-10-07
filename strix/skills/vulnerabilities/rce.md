@@ -247,3 +247,20 @@ pop graphic-context
 ## Summary
 
 RCE is a property of the execution boundary. Find the sink, establish a quiet oracle, and escalate to durable control only as far as necessary. Validate across transports and environments; defenses often differ per code path.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+Prove execution with a computed value from a harmless command (fresh operands, result not present in the request), or `id` output:
+
+```json
+{
+  "type": "rce",
+  "request": "GET /ping?host=127.0.0.1;echo%20$((83*47)) HTTP/1.1\nHost: app.example.test\n\n",
+  "response": "HTTP/1.1 200 OK\nContent-Type: text/plain\n\nPING 127.0.0.1 ...\n3901",
+  "expected": "3901"
+}
+```
+
+Use only read-only, non-destructive commands for proof.

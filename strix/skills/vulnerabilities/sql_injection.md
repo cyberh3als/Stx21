@@ -188,3 +188,39 @@ SQLi remains one of the most durable and impactful vulnerability classes. Modern
 ## Summary
 
 Modern SQLi succeeds where authorization and query construction drift from assumptions. Bind parameters everywhere, avoid dynamic identifiers, and validate at the exact boundary where user input meets SQL.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+Pick the strongest mode available. **Error-based** (the database error must be absent from the request and from a clean baseline):
+
+```json
+{
+  "type": "sql_injection",
+  "request": "GET /item?id=1' HTTP/1.1\nHost: shop.example.test\n\n",
+  "response": "HTTP/1.1 500 Internal Server Error\nContent-Type: text/html\n\nYou have an error in your SQL syntax; check the manual that corresponds to your MySQL server version",
+  "baseline_response": "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<h1>Widget</h1>"
+}
+```
+
+**Time-based** (at least 2 samples each; the injected delay must clearly exceed baseline noise):
+
+```json
+{
+  "type": "sql_injection",
+  "delay_s": 5,
+  "baseline_ms": [
+    118,
+    131,
+    124
+  ],
+  "injected_ms": [
+    5122,
+    5207,
+    5164
+  ]
+}
+```
+
+**Boolean** needs `baseline_response`, `true_response`, `false_response`. **Computed value** (UNION): send an expression such as `83*47` and set `expected` to its result (`3901`); it must not appear in the request or baseline.

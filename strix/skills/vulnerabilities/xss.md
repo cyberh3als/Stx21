@@ -204,3 +204,21 @@ Keep a compact set tuned per context:
 ## Summary
 
 Context + sink decide execution. Encode for the exact context, verify at runtime with CSP/Trusted Types, and validate every alternative render path. Small payloads with strong evidence beat payload catalogs.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+Use an **auto-firing** payload that surfaces a **unique token** (new random token per finding); click/hover payloads cannot be proven. `execution_token` must appear inside `payload`. The response must be HTML and the payload must appear unencoded outside comments/`textarea`/`title`; CSP is checked.
+
+```json
+{
+  "type": "xss",
+  "payload": "<img src=x onerror=alert('STRIX-4f9c2a')>",
+  "execution_token": "STRIX-4f9c2a",
+  "request": "GET /search?q=%3Cimg%20src%3Dx%20onerror%3Dalert(%27STRIX-4f9c2a%27)%3E HTTP/1.1\nHost: app.example.test\n\n",
+  "response": "HTTP/1.1 200 OK\nContent-Type: text/html\n\n<h2>Results for <img src=x onerror=alert('STRIX-4f9c2a')></h2>"
+}
+```
+
+For stored XSS, `request`/`response` are the later request that renders the payload.
