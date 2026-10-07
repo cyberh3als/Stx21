@@ -92,6 +92,11 @@ class ValidationSettings(BaseSettings):
     mode: Literal["off", "annotate", "enforce"] = Field(
         default="annotate", alias="STRIX_VALIDATION_MODE"
     )
+    # Re-send the finding's request (in-scope hosts only) and re-validate the
+    # fresh response. Off by default: it sends traffic to the target.
+    replay: bool = Field(default=False, alias="STRIX_VALIDATION_REPLAY")
+    replay_unsafe_methods: bool = Field(default=False, alias="STRIX_VALIDATION_REPLAY_UNSAFE")
+    replay_timeout: float = Field(default=20.0, gt=0, alias="STRIX_VALIDATION_REPLAY_TIMEOUT")
 
 
 class ContextSettings(BaseSettings):

@@ -245,6 +245,10 @@ def render_vulnerability_md(report: dict[str, Any]) -> str:  # noqa: PLR0912, PL
         lines.append(f"**Status:** {str(verification['status']).replace('_', ' ')}{suffix}")
         lines.extend(f"- [x] {item}" for item in verification.get("checks") or [])
         lines.extend(f"- [ ] {item}" for item in verification.get("reasons") or [])
+        replayed = verification.get("replay")
+        if isinstance(replayed, dict) and replayed.get("status"):
+            detail = f" ({replayed['detail']})" if replayed.get("detail") else ""
+            lines.append(f"- Replay: {str(replayed['status']).replace('_', ' ')}{detail}")
         lines.append("")
 
     controls = report.get("controls")
