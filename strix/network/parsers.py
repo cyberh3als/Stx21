@@ -2,25 +2,37 @@
 
 All parsers are tolerant: malformed lines are skipped, never guessed at. nmap
 XML comes from a tool that echoes banners from the scanned (untrusted) host, so
-documents declaring a DTD/entities are rejected before parsing.
+a DTD that declares entities (billion-laughs expansion, external SYSTEM/PUBLIC
+references) is rejected before parsing. nmap's own ``-oX`` output always opens
+with a bare ``<!DOCTYPE nmaprun>`` and nothing else, so that exact harmless form
+is allowed through — rejecting it outright silently discarded every real scan.
 """
 
 from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET  # DTDs rejected up front
+import xml.etree.ElementTree as ET  # unsafe DTDs rejected up front
 from typing import Any
 
 from strix.network.model import NucleiRecord, Service
 
 
-_DOCTYPE = re.compile(r"<!\s*(DOCTYPE|ENTITY)", re.IGNORECASE)
+# A DOCTYPE with no internal subset and no external SYSTEM/PUBLIC identifier —
+# just a bare root-element name — can declare no entities and is what nmap
+# itself emits. Anything else matching ``<!DOCTYPE`` (a subset in ``[...]``,
+# a SYSTEM/PUBLIC reference) is rejected, as is any standalone ``<!ENTITY``.
+_BARE_DOCTYPE = re.compile(r"<!\s*DOCTYPE\s+[A-Za-z_][\w:.-]*\s*>", re.IGNORECASE)
+_DOCTYPE_TOKEN = re.compile(r"<!\s*(DOCTYPE|ENTITY)\b", re.IGNORECASE)
+
+
+def _has_unsafe_dtd(text: str) -> bool:
+    return bool(_DOCTYPE_TOKEN.search(_BARE_DOCTYPE.sub("", text)))
 
 
 def parse_nmap_xml(text: str) -> list[Service]:
     """Return open services from an nmap ``-oX`` document."""
-    if not text or not text.strip() or _DOCTYPE.search(text):
+    if not text or not text.strip() or _has_unsafe_dtd(text):
         return []
     try:
         root = ET.fromstring(text.strip())  # noqa: S314  # DTD/entities rejected above

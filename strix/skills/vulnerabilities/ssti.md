@@ -268,3 +268,18 @@ Handlebars itself is harder (default helpers are restricted), but custom helpers
 ## Summary
 
 SSTI is fundamentally different from XSS at the same syntactic location: the payload runs on the server, in the host language, with whatever objects the engine exposes. Engine fingerprinting via the math-probe table narrows the search space immediately. From there it's a race between the sandbox's denylist and the language's reflection capability — and the language usually wins. Treat any user input that reaches a template renderer (not a templated context variable) as RCE-shaped until proven sandboxed.
+
+## Validation Evidence
+
+A deterministic validator re-checks the proof you submit; it does not trust your summary. Pass this as the `validation` argument of `create_vulnerability_report`, using RAW HTTP copied from tool output (never paraphrased). Findings the validator cannot confirm are flagged unverified (rejected in enforce mode), so strengthen the proof instead of filing weak evidence.
+
+Prove evaluation, not reflection: send an arithmetic expression with **fresh operands** and put the result in `expected` (at least 4 characters). It must appear in the response and NOT in the request or a baseline response.
+
+```json
+{
+  "type": "ssti",
+  "request": "GET /greet?name={{83*47}} HTTP/1.1\nHost: app.example.test\n\n",
+  "response": "HTTP/1.1 200 OK\nContent-Type: text/html\n\nHello 3901",
+  "expected": "3901"
+}
+```
