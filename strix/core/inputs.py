@@ -114,6 +114,7 @@ def build_root_task(scan_config: dict[str, Any]) -> str:
         "Local Codebases": [],
         "URLs": [],
         "IP Addresses": [],
+        "IP Ranges": [],
         "API Specifications": [],
     }
 
@@ -140,6 +141,11 @@ def build_root_task(scan_config: dict[str, Any]) -> str:
             sections["URLs"].append(f"- {details.get('target_url', '')}")
         elif ttype == "ip_address":
             sections["IP Addresses"].append(f"- {details.get('target_ip', '')}")
+        elif ttype == "ip_range":
+            sections["IP Ranges"].append(
+                f"- {details.get('target_cidr', '')} (every address in this range is in scope; "
+                "nothing outside it is)"
+            )
         elif ttype == "api_spec":
             sections["API Specifications"].extend(_render_api_spec(details))
 
@@ -196,6 +202,7 @@ def build_scope_context(scan_config: dict[str, Any]) -> dict[str, Any]:
         "local_code": "target_path",
         "web_application": "target_url",
         "ip_address": "target_ip",
+        "ip_range": "target_cidr",
         "api_spec": "target_spec",
     }
     for target in scan_config.get("targets", []) or []:

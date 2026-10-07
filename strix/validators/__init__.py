@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from strix.validators import web  # noqa: F401  (registers validators)
+from strix.validators import network, web  # noqa: F401  (registers validators)
 from strix.validators.base import available_types, canonical_type, get_validator
 from strix.validators.browser import check_xss_execution
 from strix.validators.replay import REPLAYABLE_TYPES, replay

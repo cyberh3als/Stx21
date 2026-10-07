@@ -21,6 +21,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from strix.config import load_settings
+from strix.network.scope import MAX_RANGE_ADDRESSES
 from strix.utils.api_spec import detect_spec_format
 
 
@@ -1131,7 +1132,7 @@ def _is_http_git_repo(url: str) -> bool:
         return False
 
 
-def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR0911
+def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR0911, PLR0915
     if not target or not isinstance(target, str):
         raise ValueError("Target must be a non-empty string")
 
@@ -1181,6 +1182,19 @@ def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR09
     else:
         return "ip_address", {"target_ip": str(ip_obj)}
 
+    if "/" in target:
+        try:
+            network = ipaddress.ip_network(target, strict=False)
+        except ValueError:
+            pass
+        else:
+            if network.num_addresses > MAX_RANGE_ADDRESSES:
+                raise ValueError(
+                    f"IP range {target} spans {network.num_addresses} addresses; "
+                    f"the limit is {MAX_RANGE_ADDRESSES} (a /24 for IPv4)"
+                )
+            return "ip_range", {"target_cidr": str(network)}
+
     path = Path(target).expanduser()
     try:
         if path.exists():
@@ -1223,7 +1237,7 @@ def infer_target_type(target: str) -> tuple[str, dict[str, str]]:  # noqa: PLR09
         "- A Postman collection by id (postman://<collection-uid>[?env=<environment-uid>], "
         "needs POSTMAN_API_KEY)\n"
         "- A domain name (e.g., example.com)\n"
-        "- An IP address (e.g., 192.168.1.10)"
+        "- An IP address (e.g., 192.168.1.10) or a small range (CIDR, at most 256 addresses)"
     )
 
 
